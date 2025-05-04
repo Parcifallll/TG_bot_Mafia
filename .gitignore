@@ -5,7 +5,6 @@ target/
 
 ### IntelliJ IDEA ###
 .idea/modules.xml
-src/main/java/.env
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
@@ -37,3 +36,5 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+.env

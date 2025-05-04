@@ -1,4 +1,6 @@
 import io.github.cdimascio.dotenv.Dotenv;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -6,6 +8,7 @@ import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 public class MafiaBot extends TelegramLongPollingBot {
+    private static final Logger log = LoggerFactory.getLogger(MafiaBot.class);
     private final GameCore gameCore = new GameCore();
 
     @Override
@@ -32,6 +35,7 @@ public class MafiaBot extends TelegramLongPollingBot {
                 handleStart(chatId);
             } else if (text.startsWith("/join")) {
                 handleJoin(chatId, update.getMessage().getFrom());
+                log.info("New player joined");
             }
         } catch (Exception e) {
             try {
