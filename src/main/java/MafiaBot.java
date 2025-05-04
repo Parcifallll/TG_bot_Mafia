@@ -1,3 +1,4 @@
+import io.github.cdimascio.dotenv.Dotenv;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -14,7 +15,9 @@ public class MafiaBot extends TelegramLongPollingBot {
 
     @Override
     public String getBotToken() {
-        return "7750374821:AAFj_TWGT1kvpa1qKc-3YV5MD_tJIzHcBL0";
+        Dotenv dotenv = Dotenv.load();
+        String botToken = dotenv.get("BOT_TOKEN");
+        return botToken;
     }
 
     @Override
