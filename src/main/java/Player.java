@@ -13,7 +13,9 @@ public abstract class Player {
     public abstract String getRoleDescription();
 
     public boolean isAlive() { return isAlive; }
+    public void setAlive(boolean alive) { isAlive = alive; }
     public Role getRole() { return role; }
     public void setRole(Role role) { this.role = role; }
     public String getUsername() { return username; }
+    public long getUserId() { return userId; }
 }

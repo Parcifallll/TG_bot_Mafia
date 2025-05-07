@@ -8,6 +8,7 @@ public class Main {
     static {
         System.setProperty("org.slf4j.simpleLogger.showDateTime", "true"); //log with time
         System.setProperty("org.slf4j.simpleLogger.dateTimeFormat", "HH:mm:ss"); // time format
+        System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "debug");
     }
 
     private static final Logger log = LoggerFactory.getLogger(Main.class);
