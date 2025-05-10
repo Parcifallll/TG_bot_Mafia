@@ -17,8 +17,8 @@ public class MafiaBot extends TelegramLongPollingBot {
     @Override
     public String getBotToken() {
         String token = System.getenv("BOT_TOKEN"); // take token from env vars for Railway
-        if (token == null || token.isEmpty()) { //if it is not for Railway
-            Dotenv dotenv = Dotenv.load();
+        if (token == null || token.isEmpty()) { //only for local dev
+            Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
             token = dotenv.get("BOT_TOKEN");
         }
         return token;
