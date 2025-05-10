@@ -1,7 +1,9 @@
 {
   "build": {
-    "builder": "nixpacks",
-    "buildCommand": "mvn clean package -DskipTests",
-    "runCommand": "java -jar target/Mafia-1.0-SNAPSHOT.jar"
+    "builder": "NIXPACKS",
+    "buildCommand": "mvn clean package -DskipTests"
+  },
+  "deploy": {
+    "startCommand": "java -jar target/Mafia-1.0-SNAPSHOT.jar"
   }
 }
