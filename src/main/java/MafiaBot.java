@@ -49,13 +49,13 @@ public class MafiaBot extends TelegramLongPollingBot {
             throw new IllegalStateException("Игра уже началась!");
         }
 
-        gameCore.addPlayer(new Civilian(user.getId(), user.getFirstName()));
+        gameCore.addPlayer(new Civilian(user.getId(), user.getUserName()));
 
         if (gameCore.getPlayers().size() == 1) {
             gameCreators.put(chatId, user.getId());
         }
 
-        sendMessage(chatId, "✅ " + user.getFirstName() + " присоединился!");
+        sendMessage(chatId, "✅ " + user.getUserName() + " присоединился!");
     }
 
     private void handleStartGame(long chatId, Long userId) throws TelegramApiException {
