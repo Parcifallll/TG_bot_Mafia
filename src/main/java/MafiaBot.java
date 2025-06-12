@@ -1,18 +1,24 @@
 import io.github.cdimascio.dotenv.Dotenv;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+
 import java.util.*;
 
 public class MafiaBot extends TelegramLongPollingBot {
+    private static final Logger log = LoggerFactory.getLogger(Main.class);
     private final GameCore gameCore = new GameCore();
     private final Map<Long, Long> gameCreators = new HashMap<>();
     private final Map<Long, Timer> gameTimers = new HashMap<>();
 
     @Override
-    public String getBotUsername() { return "MafiaGameBot"; }
+    public String getBotUsername() {
+        return "MafiaGameBot";
+    }
 
     @Override
     public String getBotToken() {
@@ -33,23 +39,25 @@ public class MafiaBot extends TelegramLongPollingBot {
         User user = update.getMessage().getFrom();
 
         try {
-            if (text.startsWith("/start")) handleStart(chatId);
+            if (text.startsWith("/new")) handleCreateGame(chatId);
             else if (text.startsWith("/join")) handleJoin(chatId, user);
-            else if (text.startsWith("/startgame")) handleStartGame(chatId, user.getId());
+            else if (text.startsWith("/start")) handleStartGame(chatId, user.getId());
             else handleGameAction(chatId, user, text);
         } catch (Exception e) {
             sendSafeMessage(chatId, "⛔ Ошибка: " + e.getMessage());
         }
     }
 
-    private void handleStart(long chatId) throws TelegramApiException {
+    private void handleCreateGame(long chatId) throws TelegramApiException {
         sendMessage(chatId,
                 "🎮 Мафия\n\n" +
                         "▫️ /join - Войти в игру\n" +
-                        "▫️ /startgame - Начать игру");
+                        "▫️ /start - Начать игру");
+        log.info("Display 'starting' message");
     }
 
     private void handleJoin(long chatId, User user) throws TelegramApiException {
+        log.info("Try joining a new player");
         if (gameCore.getGameState() != GameCore.GameState.WAITING) {
             throw new IllegalStateException("Игра уже началась!");
         }
@@ -60,17 +68,25 @@ public class MafiaBot extends TelegramLongPollingBot {
             gameCreators.put(chatId, user.getId());
         }
 
-        sendMessage(chatId, "✅ " + user.getUserName() + " присоединился!");
+        sendMessage(chatId, "✅ " + user.getFirstName() + " присоединился!");
     }
 
     private void handleStartGame(long chatId, Long userId) throws TelegramApiException {
-        if (!userId.equals(gameCreators.get(chatId))) {
-            throw new SecurityException("Только создатель лобби может начать игру!");
-        }
+        try {
+            if (!userId.equals(gameCreators.get(chatId))) {
+                throw new SecurityException("Только создатель лобби может начать игру!");
+            }
 
-        gameCore.startGame();
-        notifyRoles();
-        startNightPhase(chatId);
+            if (gameCore.getGameState() != GameCore.GameState.WAITING) {
+                sendMessage(chatId, "⛔ Игра уже началась или завершена!");
+                return;
+            }
+            gameCore.startGame();
+            notifyRoles();
+            startNightPhase(chatId);
+        } catch (Exception e) {
+            sendSafeMessage(chatId, "⛔ Ошибка: " + e.getMessage());
+        }
     }
 
     private void notifyRoles() throws TelegramApiException {
@@ -115,7 +131,7 @@ public class MafiaBot extends TelegramLongPollingBot {
         if (gameCore.getKilledPlayer() != null) {
             sb.append("☠️ Убит: ").append(gameCore.getKilledPlayer().getUsername());
         }
-        sb.append("\n").append(gameCore.getCommissarCheckResult());
+//        sb.append("\n").append(gameCore.getCommissarCheckResult()); do not display comissar's checks
         sendMessage(chatId, sb.toString());
     }
 
@@ -146,6 +162,7 @@ public class MafiaBot extends TelegramLongPollingBot {
         if (target == null || !target.isAlive()) return;
 
         switch (parts[0].toLowerCase()) {
+
             case "/kill" -> gameCore.processNightAction(player, target);
             case "/save" -> gameCore.processNightAction(player, target);
             case "/check" -> gameCore.processNightAction(player, target);
@@ -172,14 +189,17 @@ public class MafiaBot extends TelegramLongPollingBot {
 
     private void sendToAll(String message) {
         gameCore.getPlayers().forEach(p -> {
-            try { sendMessage(p.getUserId(), message); }
-            catch (TelegramApiException ignored) {}
+            try {
+                sendMessage(p.getUserId(), message);
+            } catch (TelegramApiException ignored) {
+            }
         });
     }
 
     private void sendRoleSpecificInstructions() {
         gameCore.getPlayers().forEach(p -> {
             try {
+                sendMessage(p.getUserId(), "Alive players:\n" + gameCore.getAlivePlayersList());
                 if (p.getRole() == Role.MAFIA) {
                     sendMessage(p.getUserId(), "🔪 Выберите жертву: /kill [имя]");
                 }
@@ -189,11 +209,12 @@ public class MafiaBot extends TelegramLongPollingBot {
                 if (p.getRole() == Role.COMMISSAR) {
                     sendMessage(p.getUserId(), "🕵️ Кого проверить: /check [имя]");
                 }
-            } catch (TelegramApiException ignored) {}
+            } catch (TelegramApiException ignored) {
+            }
         });
     }
 
-    private void sendMessage(long chatId, String text) throws TelegramApiException {
+    public void sendMessage(long chatId, String text) throws TelegramApiException {
         execute(SendMessage.builder()
                 .chatId(String.valueOf(chatId))
                 .text(text)
@@ -201,7 +222,9 @@ public class MafiaBot extends TelegramLongPollingBot {
     }
 
     private void sendSafeMessage(long chatId, String text) {
-        try { sendMessage(chatId, text); }
-        catch (TelegramApiException ignored) {}
+        try {
+            sendMessage(chatId, text);
+        } catch (TelegramApiException ignored) {
+        }
     }
 }

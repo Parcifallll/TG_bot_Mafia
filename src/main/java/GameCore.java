@@ -15,7 +15,7 @@ public class GameCore {
     public void addPlayer(Player player) {
         validateGameState(GameState.WAITING);
         if (players.stream().anyMatch(p -> p.getUserId() == player.getUserId())) {
-            throw new IllegalArgumentException("Игрок уже в игре!");
+            throw new IllegalArgumentException(player.getUsername() + ", ты уже в игре!");
         }
         players.add(player);
     }
@@ -71,6 +71,7 @@ public class GameCore {
 
     private void validatePlayersCount() {
         if (players.size() < 4) {
+           // sendMessage(chatId, "Необходимо минимум 4 игрока!);
             throw new IllegalStateException("Необходимо минимум 4 игрока!");
         }
     }
