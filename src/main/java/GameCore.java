@@ -38,7 +38,9 @@ public class GameCore {
         handleMafiaAction();
         handleDoctorAction();
         handleCommissarAction();
-        applyNightResults();
+        if (killedPlayer != null && !killedPlayer.equals(savedPlayer)) {
+            killedPlayer.setAlive(false);
+        }
         nightActions.clear();
         gameState = GameState.DAY;
     }
@@ -55,12 +57,17 @@ public class GameCore {
 
         maxVote.ifPresent(entry -> {
             Player target = findPlayerByName(entry.getKey());
-            if (target != null) target.setAlive(false);
+            if (target != null) {
+                target.setAlive(false);
+            }
         });
 
         votes.clear();
         checkWinConditions();
         gameState = GameState.NIGHT;
+    }
+    public Map<String, Integer> getVotes() {
+        return Collections.unmodifiableMap(votes);
     }
 
     private void validateGameState(GameState requiredState) {
@@ -103,7 +110,9 @@ public class GameCore {
         nightActions.entrySet().stream()
                 .filter(e -> e.getValue().startsWith("DOCTOR"))
                 .findFirst()
-                .ifPresent(action -> savedPlayer = findPlayerById(action.getKey()));
+                .ifPresent(action -> {
+                    savedPlayer = findPlayerById(action.getKey());
+                });
     }
 
     private void handleCommissarAction() {
@@ -115,13 +124,6 @@ public class GameCore {
                     commissar.performNightAction(target);
                 });
     }
-
-    private void applyNightResults() {
-        if (killedPlayer != null && !killedPlayer.equals(savedPlayer)) {
-            killedPlayer.setAlive(false);
-        }
-    }
-
     private void checkWinConditions() {
         long mafiaAlive = countAliveByRole(Role.MAFIA);
         long civiliansAlive = countAliveByRole(Role.CIVILIAN)
@@ -129,7 +131,7 @@ public class GameCore {
                 + countAliveByRole(Role.COMMISSAR);
 
         if (mafiaAlive == 0) endGame("Мирные победили!");
-        if (mafiaAlive >= civiliansAlive) endGame("Мафия победила!");
+        else if (mafiaAlive >= civiliansAlive) endGame("Мафия победила!");
     }
 
     public Player findPlayerById(Long userId) {
@@ -152,11 +154,6 @@ public class GameCore {
                 .map(Player::getUsername)
                 .collect(Collectors.joining("\n"));
     }
-
-    public String getCommissarCheckResult() {
-        return commissar.getCheckResult();
-    }
-
     public String getGameResult() {
         return gameState == GameState.ENDED ?
                 (countAliveByRole(Role.MAFIA) == 0 ?

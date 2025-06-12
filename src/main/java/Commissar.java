@@ -12,6 +12,10 @@ public class Commissar extends Player {
             checkedPlayer = target;
         }
     }
+    public String checkPlayer(Player target) {
+        performNightAction(target);
+        return getCheckResult();
+    }
 
     public String getCheckResult() {
         if (checkedPlayer == null) {

@@ -121,6 +121,7 @@ public class MafiaBot extends TelegramLongPollingBot {
             gameCore.resolveDayVoting();
             checkGameEnd(chatId);
             startNightPhase(chatId);
+            sendDayResults(chatId);
         } catch (Exception e) {
             sendSafeMessage(chatId, e.getMessage());
         }
@@ -129,10 +130,25 @@ public class MafiaBot extends TelegramLongPollingBot {
     private void sendNightResults(long chatId) throws TelegramApiException {
         StringBuilder sb = new StringBuilder("🌃 Ночью:\n");
         if (gameCore.getKilledPlayer() != null) {
-            sb.append("☠️ Убит: ").append(gameCore.getKilledPlayer().getUsername());
+            Player killed = gameCore.getKilledPlayer();
+            sb.append("☠️ Убит: ").append(killed.getUsername());
+            sendSafeMessage(killed.getUserId(), "☠️ Вас убили ночью. Вы выбываете из игры.");
         }
-//        sb.append("\n").append(gameCore.getCommissarCheckResult()); do not display comissar's checks
         sendMessage(chatId, sb.toString());
+    }
+    private void sendDayResults(long chatId) throws TelegramApiException {
+        Optional<Map.Entry<String, Integer>> maxVote = gameCore.getVotes().entrySet()
+                .stream()
+                .max(Map.Entry.comparingByValue());
+
+        if (maxVote.isPresent()) {
+            Player lynched = gameCore.findPlayerByName(maxVote.get().getKey());
+            if (lynched != null) {
+                String message = "☠️ Днем линчеван: " + lynched.getUsername();
+                sendMessage(chatId, message);
+                sendSafeMessage(lynched.getUserId(), "☠️ Вас линчевали днем. Вы выбываете из игры.");
+            }
+        }
     }
 
     private void checkGameEnd(long chatId) throws TelegramApiException {
@@ -146,7 +162,10 @@ public class MafiaBot extends TelegramLongPollingBot {
     private void handleGameAction(long chatId, User user, String text)
             throws TelegramApiException {
         Player player = gameCore.getPlayerById(user.getId());
-        if (player == null || !player.isAlive()) return;
+        if (player == null || !player.isAlive()) {
+            sendSafeMessage(chatId, "⚠️ Мертвые игроки не могут выполнять действия");
+            return;
+        }
 
         switch (gameCore.getGameState()) {
             case NIGHT -> handleNightAction(player, text);
@@ -197,7 +216,8 @@ public class MafiaBot extends TelegramLongPollingBot {
                     return;
                 }
                 gameCore.processNightAction(player, target);
-                sendSafeMessage(player.getUserId(), "🔍 Вы проверяете: " + targetUsername);
+                String result = ((Commissar) player).checkPlayer(target);
+                sendSafeMessage(player.getUserId(), result);
                 break;
         }
     }
@@ -222,30 +242,34 @@ public class MafiaBot extends TelegramLongPollingBot {
     }
 
     private void sendToAll(String message) {
-        gameCore.getPlayers().forEach(p -> {
-            try {
-                sendMessage(p.getUserId(), message);
-            } catch (TelegramApiException ignored) {
-            }
-        });
+        gameCore.getPlayers().stream()
+                .filter(Player::isAlive)
+                .forEach(p -> {
+                    try {
+                        sendMessage(p.getUserId(), message);
+                    } catch (TelegramApiException ignored) {
+                    }
+                });
     }
 
     private void sendRoleSpecificInstructions() {
-        gameCore.getPlayers().forEach(p -> {
-            try {
-                sendMessage(p.getUserId(), "Alive players:\n" + gameCore.getAlivePlayersList());
-                if (p.getRole() == Role.MAFIA) {
-                    sendMessage(p.getUserId(), "🔪 Выберите жертву: /kill [имя]");
-                }
-                if (p.getRole() == Role.DOCTOR) {
-                    sendMessage(p.getUserId(), "💉 Кого спасти: /save [имя]");
-                }
-                if (p.getRole() == Role.COMMISSAR) {
-                    sendMessage(p.getUserId(), "🕵️ Кого проверить: /check [имя]");
-                }
-            } catch (TelegramApiException ignored) {
-            }
-        });
+        gameCore.getPlayers().stream()
+                .filter(Player::isAlive)
+                .forEach(p -> {
+                    try {
+                        sendMessage(p.getUserId(), "Alive players:\n" + gameCore.getAlivePlayersList());
+                        if (p.getRole() == Role.MAFIA) {
+                            sendMessage(p.getUserId(), "🔪 Выберите жертву: /kill [имя]");
+                        }
+                        if (p.getRole() == Role.DOCTOR) {
+                            sendMessage(p.getUserId(), "💉 Кого спасти: /save [имя]");
+                        }
+                        if (p.getRole() == Role.COMMISSAR) {
+                            sendMessage(p.getUserId(), "🕵️ Кого проверить: /check [имя]");
+                        }
+                    } catch (TelegramApiException ignored) {
+                    }
+                });
     }
 
     public void sendMessage(long chatId, String text) throws TelegramApiException {

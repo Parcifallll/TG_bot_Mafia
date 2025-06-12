@@ -10,6 +10,6 @@ public class Doctor extends Player {
 
     @Override
     public String getRoleDescription() {
-        return "Вы доктор. Спасайте игроков от мафии!";
+        return "Вы доктор. Спасайте игроков (включая себя) от мафии!";
     }
 }
