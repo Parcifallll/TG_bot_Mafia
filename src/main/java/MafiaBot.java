@@ -153,21 +153,55 @@ public class MafiaBot extends TelegramLongPollingBot {
             case DAY -> handleDayAction(chatId, player, text);
         }
     }
-
     private void handleNightAction(Player player, String text) {
         String[] parts = text.split(" ", 2);
-        if (parts.length < 2) return;
+        if (parts.length < 2) {
+            sendSafeMessage(player.getUserId(), "❌ Неверный формат! Используйте: /команда [ник]");
+            return;
+        }
 
-        Player target = gameCore.findPlayerByName(parts[1]);
-        if (target == null || !target.isAlive()) return;
+        String command = parts[0].toLowerCase();
+        String targetUsername = parts[1];
+        Player target = gameCore.findPlayerByName(targetUsername);
+        if (target == null) {
+            sendSafeMessage(player.getUserId(), "❌ Игрок '" + targetUsername + "' не найден!");
+            return;
+        }
+        if (!target.isAlive()) {
+            sendSafeMessage(player.getUserId(), "❌ Игрок '" + targetUsername + "' уже мертв!");
+            return;
+        }
 
-        switch (parts[0].toLowerCase()) {
+        switch (command) {
+            case "/kill":
+                if (player.getRole() != Role.MAFIA) {
+                    sendSafeMessage(player.getUserId(), "⛔ Только мафия может убивать!");
+                    return;
+                }
+                gameCore.processNightAction(player, target);
+                sendSafeMessage(player.getUserId(), "✅ Вы выбрали жертву: " + targetUsername);
+                break;
 
-            case "/kill" -> gameCore.processNightAction(player, target);
-            case "/save" -> gameCore.processNightAction(player, target);
-            case "/check" -> gameCore.processNightAction(player, target);
+            case "/save":
+                if (player.getRole() != Role.DOCTOR) {
+                    sendSafeMessage(player.getUserId(), "⛔ Только доктор может лечить!");
+                    return;
+                }
+                gameCore.processNightAction(player, target);
+                sendSafeMessage(player.getUserId(), "✅ Вы будете лечить: " + targetUsername);
+                break;
+
+            case "/check":
+                if (player.getRole() != Role.COMMISSAR) {
+                    sendSafeMessage(player.getUserId(), "⛔ Только комиссар может проверять!");
+                    return;
+                }
+                gameCore.processNightAction(player, target);
+                sendSafeMessage(player.getUserId(), "🔍 Вы проверяете: " + targetUsername);
+                break;
         }
     }
+
 
     private void handleDayAction(long chatId, Player player, String text) {
         if (text.startsWith("/vote ")) {
