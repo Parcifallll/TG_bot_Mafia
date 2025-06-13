@@ -125,10 +125,19 @@ public class MafiaBot extends TelegramLongPollingBot {
         try {
             gameCore.resolveNightActions();
             sendNightResults(chatId);
+
             String dayMessage = "☀️ День начался! Обсуждение (40 сек):\n" +
                     "Живые игроки:\n" + gameCore.getAlivePlayersList() +
                     "\n\nГолосовать: /vote [ник]" +
-                    "\nОтправить анонимное сообщение: /message [текст]";
+                    "\nАнонимное сообщение: /message [текст]";
+            Player commissar = gameCore.getPlayers().stream()
+                    .filter(p -> p.getRole() == Role.COMMISSAR && p.isAlive())
+                    .findFirst()
+                    .orElse(null);
+
+            if (commissar != null && !((Commissar) commissar).isRevealed()) {
+                dayMessage += "\n\nКомиссар может вскрыться: /reveal";
+            }
 
             sendSafeMessage(chatId, dayMessage);
             startTimer(chatId, 40, () -> endDayPhase(chatId));
@@ -277,6 +286,25 @@ public class MafiaBot extends TelegramLongPollingBot {
         }
         else if (text.startsWith("/message ")) {
             handleAnonymousMessage(chatId, player, text);
+        }
+        else if (text.equals("/reveal")) {
+            handleRevealCommand(chatId, player);
+        }
+    }
+    private void handleRevealCommand(long chatId, Player player) {
+        if (player.getRole() != Role.COMMISSAR) {
+            sendSafeMessage(player.getUserId(), "⛔ Только комиссар может использовать эту команду!");
+            return;
+        }
+        Commissar commissar = (Commissar) player;
+        if (commissar.isRevealed()) {
+            sendSafeMessage(player.getUserId(), "⛔ Вы уже вскрылись ранее!");
+            return;
+        }
+        commissar.reveal();
+        long gameChatId = gameCore.getGameChatId();
+        if (gameChatId != 0) {
+            sendSafeMessage(gameChatId, "🕵️♂️ Игрок " + player.getUsername() + " вскрывается и оказывается комиссаром!");
         }
     }
     private void handleAnonymousMessage(long chatId, Player player, String text) {

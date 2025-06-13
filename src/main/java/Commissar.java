@@ -1,5 +1,6 @@
 public class Commissar extends Player {
     private Player checkedPlayer;
+    private boolean isRevealed = false;
 
     public Commissar(long userId, String username) {
         super(userId, username);
@@ -15,6 +16,13 @@ public class Commissar extends Player {
     public String checkPlayer(Player target) {
         performNightAction(target);
         return getCheckResult();
+    }
+    public void reveal() {
+        isRevealed = true;
+    }
+
+    public boolean isRevealed() {
+        return isRevealed;
     }
 
     public String getCheckResult() {
@@ -32,6 +40,7 @@ public class Commissar extends Player {
             🕵️♂️ Вы — комиссар!
             Каждую ночь вы можете проверить одного игрока.
             Используйте команду: /check [тег_игрока]
+            Днём вы можете вскрыться: /reveal
             """;
     }
 }

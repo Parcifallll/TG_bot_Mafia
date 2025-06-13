@@ -134,7 +134,6 @@ public class GameCore {
     private void assignRoles() {
         Collections.shuffle(players);
         List<Player> newPlayers = new ArrayList<>();
-
         newPlayers.add(new Mafia(players.get(0).getUserId(), players.get(0).getUsername()));
         newPlayers.add(new Doctor(players.get(1).getUserId(), players.get(1).getUsername()));
         commissar = new Commissar(players.get(2).getUserId(), players.get(2).getUsername());
@@ -229,6 +228,7 @@ public class GameCore {
         killedPlayer = null;
         savedPlayer = null;
         gameChatId = 0;
+        commissar = null;
     }
 
     public void endGame(String resultMessage) {
