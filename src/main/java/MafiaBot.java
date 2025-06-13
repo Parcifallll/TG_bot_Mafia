@@ -14,6 +14,7 @@ public class MafiaBot extends TelegramLongPollingBot {
     private final GameCore gameCore = new GameCore();
     private final Map<Long, Long> gameCreators = new HashMap<>();
     private final Map<Long, Timer> gameTimers = new HashMap<>();
+    private final Map<Long, String> lastWords = new HashMap<>();
 
     @Override
     public String getBotUsername() {
@@ -22,8 +23,8 @@ public class MafiaBot extends TelegramLongPollingBot {
 
     @Override
     public String getBotToken() {
-        String token = System.getenv("BOT_TOKEN"); // take token from env vars for Railway
-        if (token == null || token.isEmpty()) { //only for local dev
+        String token = System.getenv("BOT_TOKEN");
+        if (token == null || token.isEmpty()) {
             Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
             token = dotenv.get("BOT_TOKEN");
         }
@@ -44,6 +45,21 @@ public class MafiaBot extends TelegramLongPollingBot {
             else handleGameAction(chatId, user, text);
         } catch (Exception e) {
             sendSafeMessage(chatId, "⛔ Ошибка: " + e.getMessage());
+        }
+        if (gameCore.getGameState() != GameCore.GameState.ENDED) {
+            handleLastWords(chatId, user, text);
+        }
+    }
+
+    private void handleLastWords(long chatId, User user, String text) {
+        Player player = gameCore.getPlayerById(user.getId());
+        if (player != null && !player.isAlive() && !lastWords.containsKey(user.getId())) {
+            lastWords.put(user.getId(), text);
+            String message = "💀 " + user.getUserName() + " успел сказать:\n" + text;
+            long gameChatId = gameCore.getGameChatId();
+            if (gameChatId != 0) {
+                sendSafeMessage(gameChatId, message);
+            }
         }
     }
 
@@ -78,6 +94,7 @@ public class MafiaBot extends TelegramLongPollingBot {
                 sendMessage(chatId, "⛔ Игра уже началась или завершена!");
                 return;
             }
+            gameCore.setGameChatId(chatId);
             gameCore.startGame();
             notifyRoles();
             startNightPhase(chatId);
@@ -93,82 +110,85 @@ public class MafiaBot extends TelegramLongPollingBot {
     }
 
     private void startNightPhase(long chatId) throws TelegramApiException {
+        if (gameCore.getGameState() == GameCore.GameState.ENDED) {
+            tryEndGame(chatId);
+            return;
+        }
+
         gameCore.setGameState(GameCore.GameState.NIGHT);
-        sendToAll("🌙 Ночь началась! У вас 60 секунд:");
+        sendToAll("🌙 Ночь началась! У вас 40 секунд:");
         sendRoleSpecificInstructions();
-        startTimer(chatId, 60, () -> startDayPhase(chatId));
+        startTimer(chatId, 40, () -> startDayPhase(chatId));
     }
 
     private void startDayPhase(long chatId) {
         try {
             gameCore.resolveNightActions();
             sendNightResults(chatId);
-            tryEndGame(chatId);
+            String dayMessage = "☀️ День начался! Обсуждение (40 сек):\n" +
+                    "Живые игроки:\n" + gameCore.getAlivePlayersList() +
+                    "\n\nГолосовать: /vote [ник]" +
+                    "\nОтправить анонимное сообщение: /message [текст]";
 
-            if (gameCore.getGameState() == GameCore.GameState.ENDED) {
-                return;
-            }
-
-            gameCore.setGameState(GameCore.GameState.DAY);
-            String message = "☀️ День начался! Обсуждение (90 сек):\n" + "Живые игроки:\n" + gameCore.getAlivePlayersList() + "\n\nГолосовать: /vote [ник]";
-
-            sendToAll(message);
-            startTimer(chatId, 90, () -> endDayPhase(chatId));
+            sendSafeMessage(chatId, dayMessage);
+            startTimer(chatId, 40, () -> endDayPhase(chatId));
         } catch (Exception e) {
-            sendSafeMessage(chatId, e.getMessage());
+            sendSafeMessage(chatId, "Ошибка: " + e.getMessage());
         }
     }
 
     private void endDayPhase(long chatId) {
         try {
             gameCore.resolveDayVoting();
-            sendDayResults(chatId, new HashMap<>(gameCore.getVotes()));
-            tryEndGame(chatId);
+            sendDayResults(chatId, new HashMap<>(gameCore.getVotesSnapshot()));
 
-            if (gameCore.getGameState() != GameCore.GameState.ENDED) {
+
+            if (gameCore.getGameState() == GameCore.GameState.ENDED) {
+                tryEndGame(chatId);
+            } else {
+
                 startNightPhase(chatId);
             }
         } catch (Exception e) {
-            sendSafeMessage(chatId, e.getMessage());
+            sendSafeMessage(chatId, "Ошибка: " + e.getMessage());
         }
     }
 
     private void sendNightResults(long chatId) throws TelegramApiException {
         StringBuilder sb = new StringBuilder("🌃 Ночью:\n");
-        if (gameCore.getKilledPlayer() != null) {
-            Player killed = gameCore.getKilledPlayer();
+        Player killed = gameCore.getKilledPlayer();
+        Player saved = gameCore.getSavedPlayer();
+        if (killed != null && killed.equals(saved)) {
+            sb.append("🔥 ").append(killed.getUsername())
+                    .append(" был атакован, но спасён доктором!");
+        } else if (killed != null) {
             sb.append("☠️ Убит: ").append(killed.getUsername());
             sendSafeMessage(killed.getUserId(), "☠️ Вас убили ночью. Вы выбываете из игры.");
+        } else {
+            sb.append("Никто не пострадал 🌟");
         }
+
         sendMessage(chatId, sb.toString());
     }
+
 
     private void sendDayResults(long chatId, Map<String, Integer> votes) throws TelegramApiException {
         StringBuilder result = new StringBuilder("🗳 Результаты голосования:\n");
         votes.forEach((player, count) -> result.append("• ").append(player).append(": ").append(count).append(" голосов\n"));
 
-        Optional<Map.Entry<String, Integer>> maxVote = votes.entrySet().stream().max(Map.Entry.comparingByValue());
-
-        if (maxVote.isPresent()) {
-            Player lynched = gameCore.findPlayerByName(maxVote.get().getKey());
-            if (lynched != null) {
-                result.append("\n☠️ Линчеван: ").append(lynched.getUsername());
-            }
+        Player lynched = gameCore.getKilledPlayer();
+        if (lynched != null) {
+            result.append("\n☠️ Линчеван: ").append(lynched.getUsername());
         } else {
-            result.append("\nНикто не был линчеван");
+            if (!votes.isEmpty()) {
+                result.append("\n⏭ Ничья! Никто не линчеван");
+            } else {
+                result.append("\n🗣️ Никто не голосовал");
+            }
         }
 
         sendMessage(chatId, result.toString());
     }
-
-    private void checkGameEnd(long chatId) throws TelegramApiException {
-        if (gameCore.getGameState() == GameCore.GameState.ENDED) {
-            sendToAll("🏁 Игра окончена! " + gameCore.getGameResult());
-            gameCore.reset();
-            gameTimers.get(chatId).cancel();
-        }
-    }
-
     private void handleGameAction(long chatId, User user, String text) throws TelegramApiException {
         Player player = gameCore.getPlayerById(user.getId());
         if (player == null || !player.isAlive()) {
@@ -255,6 +275,26 @@ public class MafiaBot extends TelegramLongPollingBot {
             gameCore.addVote(player.getUserId(), targetUsername);
             sendSafeMessage(player.getUserId(), "✅ Ваш голос против " + targetUsername + " учтен!");
         }
+        else if (text.startsWith("/message ")) {
+            handleAnonymousMessage(chatId, player, text);
+        }
+    }
+    private void handleAnonymousMessage(long chatId, Player player, String text) {
+        if (text.length() <= "/message ".length()) {
+            sendSafeMessage(player.getUserId(), "❌ Неверный формат! Используйте: /message [текст]");
+            return;
+        }
+
+        String message = text.substring("/message ".length()).trim();
+        if (message.isEmpty()) {
+            sendSafeMessage(player.getUserId(), "❌ Сообщение не может быть пустым!");
+            return;
+        }
+
+        long gameChatId = gameCore.getGameChatId();
+        if (gameChatId != 0) {
+            sendSafeMessage(gameChatId, "💬 Анонимное сообщение: " + message);
+        }
     }
 
     private void startTimer(long chatId, int seconds, Runnable callback) {
@@ -308,7 +348,11 @@ public class MafiaBot extends TelegramLongPollingBot {
     private void tryEndGame(long chatId) {
         if (gameCore.getGameState() == GameCore.GameState.ENDED) {
             String result = "🏁 Игра окончена! " + gameCore.getDetailedGameResult();
-            sendToAll(result);
+            long gameChatId = gameCore.getGameChatId();
+            if (gameChatId != 0) {
+                sendSafeMessage(gameChatId, result);
+            }
+
             gameCore.reset();
             if (gameTimers.containsKey(chatId)) {
                 gameTimers.get(chatId).cancel();

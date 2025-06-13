@@ -4,8 +4,16 @@ import java.util.stream.Collectors;
 public class GameCore {
     private List<Player> players = new ArrayList<>();
     private GameState gameState = GameState.WAITING;
+    private long gameChatId;
     private final Map<Long, String> nightActions = new HashMap<>();
-    private final Map<String, Integer> votes = new HashMap<>();
+    private final Map<Long, String> playerVotes = new HashMap<>(); // voterId → targetUsername
+    private final Map<String, Integer> voteCounts = new HashMap<>();
+    private Map<String, Integer> voteCountsSnapshot;
+
+    Optional<Map.Entry<String, Integer>> maxEntry = voteCounts.entrySet()
+            .stream()
+            .max(Map.Entry.comparingByValue());// username → count
+
     private Player killedPlayer;
     private Player savedPlayer;
     private Commissar commissar;
@@ -25,6 +33,7 @@ public class GameCore {
         assignRoles();
         gameState = GameState.NIGHT;
     }
+
 
 
     public void resolveNightActions() {
@@ -50,6 +59,13 @@ public class GameCore {
             killedPlayer.setAlive(false);
         }
     }
+    public void setGameChatId(long gameChatId) {
+        this.gameChatId = gameChatId;
+    }
+
+    public long getGameChatId() {
+        return gameChatId;
+    }
 
     public void addVote(Long voterId, String targetUsername) {
         if (gameState != GameState.DAY) return;
@@ -57,26 +73,52 @@ public class GameCore {
         Player voter = findPlayerById(voterId);
         if (voter == null || !voter.isAlive()) return;
 
-        votes.merge(targetUsername, 1, Integer::sum);
+        String normalizedTarget = targetUsername.trim().toLowerCase();
+        if (playerVotes.containsKey(voterId)) {
+            String prevVote = playerVotes.get(voterId);
+            voteCounts.compute(prevVote, (k, v) -> (v == null || v <= 1) ? null : v - 1);
+        }
+        playerVotes.put(voterId, normalizedTarget);
+        voteCounts.put(normalizedTarget, voteCounts.getOrDefault(normalizedTarget, 0) + 1);
     }
 
     public void resolveDayVoting() {
-        Optional<Map.Entry<String, Integer>> maxVote = votes.entrySet().stream().max(Map.Entry.comparingByValue());
+        killedPlayer = null;
+        voteCounts.clear();
+        for (String username : playerVotes.values()) {
+            voteCounts.put(username, voteCounts.getOrDefault(username, 0) + 1);
+        }
+        if (!voteCounts.isEmpty()) {
+            int maxVotes = Collections.max(voteCounts.values());
+            List<String> candidates = voteCounts.entrySet().stream()
+                    .filter(e -> e.getValue() == maxVotes)
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
 
-        maxVote.ifPresent(entry -> {
-            Player target = findPlayerByName(entry.getKey());
-            if (target != null) {
-                target.setAlive(false);
-                killedPlayer = target;
+
+            if (candidates.size() == 1) {
+                String targetUsername = candidates.get(0);
+                Player target = findPlayerByName(targetUsername);
+                if (target != null && target.isAlive()) {
+                    target.setAlive(false);
+                    killedPlayer = target;
+                }
             }
-        });
+        }
+        voteCountsSnapshot = new HashMap<>(voteCounts);
+        playerVotes.clear();
 
-        votes.clear();
         checkWinConditions();
-        gameState = GameState.NIGHT;
+        if (gameState != GameState.ENDED) {
+            gameState = GameState.NIGHT;
+        }
     }
-
-
+    public Map<String, Integer> getVotesSnapshot() {
+        return voteCountsSnapshot;
+    }
+    public Map<String, Integer> getVotes() {
+        return Collections.unmodifiableMap(voteCounts);
+    }
     private void validateGameState(GameState requiredState) {
         if (gameState != requiredState) {
             throw new IllegalStateException("Некорректное состояние игры!");
@@ -132,12 +174,12 @@ public class GameCore {
         long mafiaAlive = countAliveByRole(Role.MAFIA);
         long civiliansAlive = totalAlive - mafiaAlive;
 
-        if (totalAlive == 0) {
-            endGame("🤝 Ничья! Все игроки погибли");
-        } else if (mafiaAlive == 0) {
+        if (mafiaAlive == 0) {
             endGame("🟢 Мирные победили!");
-        } else if (mafiaAlive >= civiliansAlive) {
+        } else if (mafiaAlive >= civiliansAlive || civiliansAlive == 0) {
             endGame("🔴 Мафия победила!");
+        } else if (totalAlive == 0) {
+            endGame("🤝 Ничья! Все игроки погибли");
         }
     }
 
@@ -160,11 +202,11 @@ public class GameCore {
     }
 
     public Player findPlayerByName(String name) {
-        return players.stream().filter(p -> p.getUsername().equalsIgnoreCase(name)).findFirst().orElse(null);
-    }
-
-    public Map<String, Integer> getVotes() {
-        return Collections.unmodifiableMap(votes);
+        String normalized = name.trim().toLowerCase();
+        return players.stream()
+                .filter(p -> p.getUsername().toLowerCase().equals(normalized))
+                .findFirst()
+                .orElse(null);
     }
 
     public String getAlivePlayersList() {
@@ -182,10 +224,11 @@ public class GameCore {
     public void reset() {
         players.clear();
         nightActions.clear();
-        votes.clear();
+        playerVotes.clear();
         gameState = GameState.WAITING;
         killedPlayer = null;
         savedPlayer = null;
+        gameChatId = 0;
     }
 
     public void endGame(String resultMessage) {
@@ -214,7 +257,9 @@ public class GameCore {
     public Player getKilledPlayer() {
         return killedPlayer;
     }
-
+    public Player getSavedPlayer() {
+        return savedPlayer;
+    }
     public void setGameState(GameState state) {
         this.gameState = state;
     }
